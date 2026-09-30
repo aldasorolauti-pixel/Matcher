@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#121316">
+  <title>Project Name Matcher</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,400,0,0&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: Geist, sans-serif;
+      font-synthesis: none;
+      --canvas: #121316;
+      --surface: #1b1b1f;
+      --surface-low: #0d0e11;
+      --surface-raised: #272a30;
+      --surface-hover: #383c45;
+      --text: #f1f3f5;
+      --muted: #9096a2;
+      --border: #2e323a;
+      --border-strong: #3e434d;
+      --error: #ffb4ab;
+      --radius-panel: 24px;
+      --radius-inner: 16px;
+      --mono: "JetBrains Mono", monospace;
+    }
+    * { box-sizing: border-box; }
+    body { min-width: 320px; min-height: 100vh; margin: 0; background: var(--canvas); color: var(--text); }
+    button, input, textarea { font: inherit; }
+    button { color: inherit; }
+    .shell { width: min(1440px, 100%); min-height: 100vh; margin-inline: auto; padding: 24px; display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 12px; }
+    .rail { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 10px 0; border-right: 1px solid var(--border); }
+    .brand-mark, .rail-button { width: 40px; height: 40px; display: grid; place-items: center; border: 1px solid var(--border-strong); border-radius: 12px; background: var(--surface-raised); color: var(--text); }
+    .brand-mark { font: 600 12px var(--mono); }
+    .rail-button { border-color: transparent; background: transparent; color: var(--muted); cursor: pointer; }
+    .rail-button[aria-current="page"] { border-color: var(--border-strong); background: var(--surface-raised); color: var(--text); }
+    .rail-spacer { flex: 1; }
+    .workspace { min-width: 0; }
+    .topbar { min-height: 48px; display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 0 0 20px; }
+    .eyebrow, .label, .meta, .mono { font-family: var(--mono); }
+    .eyebrow { margin: 0 0 4px; color: var(--muted); font-size: 10px; line-height: 14px; text-transform: uppercase; }
+    h1 { margin: 0; font-size: 24px; font-weight: 500; line-height: 32px; }
+    .connection { display: inline-flex; align-items: center; gap: 8px; padding: 7px 10px; border: 1px solid var(--border-strong); border-radius: 999px; background: var(--surface-raised); color: #c4c7c9; font: 10px var(--mono); white-space: nowrap; }
+    .connection::before { width: 7px; height: 7px; border-radius: 50%; background: #9096a2; content: ""; }
+    .connection[data-state="online"]::before { background: #f1f3f5; }
+    .connection[data-state="offline"] { color: var(--error); }
+    .connection[data-state="offline"]::before { background: var(--error); }
+    .layout { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(300px, 0.8fr); gap: 12px; align-items: start; }
+    .column { display: grid; gap: 12px; min-width: 0; }
+    .panel { min-width: 0; padding: 20px; border: 1px solid var(--border); border-radius: var(--radius-panel); background: var(--surface); }
+    .panel-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+    .panel-heading h2 { margin: 0; font-size: 16px; font-weight: 500; line-height: 24px; }
+    .panel-heading p { margin: 4px 0 0; color: var(--muted); font-size: 13px; line-height: 18px; }
+    .label { display: block; margin-bottom: 8px; color: var(--muted); font-size: 10px; line-height: 14px; text-transform: uppercase; }
+    .field-group { margin-bottom: 18px; }
+    .text-field, .project-list { width: 100%; border: 1px solid var(--border); border-radius: 12px; outline: none; background: var(--surface-low); color: var(--text); transition: border-color 140ms ease, background 140ms ease; }
+    .text-field { min-height: 46px; padding: 11px 13px; }
+    .project-list { min-height: 218px; padding: 12px 13px; resize: vertical; font: 12px/1.8 var(--mono); }
+    .text-field::placeholder, .project-list::placeholder { color: #666c76; }
+    .text-field:focus, .project-list:focus { border-color: var(--text); background: #151619; }
+    .catalog-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+    .catalog-toolbar .label { margin: 0; }
+    .catalog-actions { display: flex; align-items: center; gap: 8px; }
+    .count { color: var(--muted); font: 10px var(--mono); white-space: nowrap; }
+    .button { min-height: 38px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 8px 13px; border: 1px solid var(--border-strong); border-radius: 999px; background: var(--surface-raised); color: var(--text); font-size: 12px; font-weight: 500; cursor: pointer; transition: background 140ms ease, border-color 140ms ease; }
+    .button:hover { background: var(--surface-hover); border-color: #525866; }
+    .button:focus-visible, .rail-button:focus-visible { outline: 1px solid var(--text); outline-offset: 2px; }
+    .button-primary { min-height: 44px; padding-inline: 19px; border-color: var(--text); background: var(--text); color: #121316; }
+    .button-primary:hover { border-color: #d5d9dd; background: #d5d9dd; }
+    .button:disabled { opacity: 0.55; cursor: wait; }
+    .icon { font-family: "Material Symbols Outlined"; font-size: 18px; line-height: 1; }
+    .threshold-row { display: grid; grid-template-columns: minmax(0, 1fr) 62px; align-items: center; gap: 14px; }
+    input[type="range"] { width: 100%; height: 4px; accent-color: var(--text); cursor: pointer; }
+    .threshold-value { width: 62px; padding: 7px 5px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface-raised); color: var(--text); text-align: center; font: 11px var(--mono); }
+    .form-footer { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding-top: 17px; border-top: 1px solid var(--border); }
+    .form-note { margin: 0; color: var(--muted); font-size: 11px; line-height: 16px; }
+    .result-panel { min-height: 255px; }
+    .result-state { min-height: 160px; display: grid; align-content: center; justify-items: start; gap: 10px; }
+    .result-icon { width: 40px; height: 40px; display: grid; place-items: center; border: 1px solid var(--border-strong); border-radius: 12px; background: var(--surface-raised); color: #c4c7c9; }
+    .result-state h3 { margin: 0; font-size: 18px; font-weight: 500; line-height: 24px; }
+    .result-state p { max-width: 42ch; margin: 0; color: var(--muted); font-size: 13px; line-height: 19px; }
+    .result-state[data-kind="error"] .result-icon { color: var(--error); }
+    .result-state[data-kind="match"] .result-icon { color: var(--text); }
+    .result-detail { display: none; gap: 14px; align-items: center; margin-top: 14px; padding-top: 15px; border-top: 1px solid var(--border); }
+    .result-detail.visible { display: grid; }
+    .score-line { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+    .score-line span:first-child { color: var(--muted); font: 10px var(--mono); text-transform: uppercase; }
+    .score { font: 600 22px var(--mono); }
+    .score-track { height: 5px; overflow: hidden; border-radius: 999px; background: var(--surface-raised); }
+    .score-fill { width: 0; height: 100%; border-radius: inherit; background: var(--text); transition: width 280ms ease; }
+    .info-list { display: grid; gap: 0; margin: 0; }
+    .info-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; padding: 12px 0; border-top: 1px solid var(--border); font-size: 12px; line-height: 18px; }
+    .info-row dt { color: var(--muted); }
+    .info-row dd { margin: 0; text-align: right; }
+    .info-row dd.mono { font-size: 11px; }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; clip-path: inset(50%); }
+    @media (min-width: 1440px) { .shell { padding: 32px; } .layout { grid-template-columns: minmax(0, 1.6fr) minmax(320px, 0.8fr); } }
+    @media (max-width: 900px) { .layout { grid-template-columns: minmax(0, 1fr); } .column-secondary { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; } .result-panel { grid-row: span 2; } }
+    @media (max-width: 640px) {
+      .shell { grid-template-columns: 1fr; gap: 12px; padding: 12px; }
+      .rail { order: 2; position: sticky; z-index: 2; bottom: 0; flex-direction: row; justify-content: center; padding: 8px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); }
+      .rail-spacer { display: none; }
+      .workspace { order: 1; }
+      .topbar { align-items: flex-start; margin-bottom: 14px; }
+      h1 { font-size: 21px; line-height: 28px; }
+      .connection { margin-top: 4px; font-size: 9px; }
+      .panel { padding: 16px; border-radius: 18px; }
+      .column-secondary { grid-template-columns: minmax(0, 1fr); }
+      .result-panel { grid-row: auto; }
+      .form-footer { align-items: stretch; flex-direction: column; }
+      .button-primary { width: 100%; }
+      .project-list { min-height: 180px; }
+    }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; } }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <nav class="rail" aria-label="Workspace navigation">
+      <div class="brand-mark" aria-label="Project Matcher">PM</div>
+      <button class="rail-button" type="button" aria-current="page" aria-label="Matcher" title="Matcher"><span class="icon" aria-hidden="true">search</span></button>
+      <div class="rail-spacer"></div>
+      <button class="rail-button" type="button" aria-label="API documentation" title="API documentation" id="docs-link"><span class="icon" aria-hidden="true">terminal</span></button>
+    </nav>
+
+    <main class="workspace">
+      <header class="topbar">
+        <div><p class="eyebrow">AEC / RECORD RECONCILIATION</p><h1>Project name matcher</h1></div>
+        <div class="connection" id="connection-state" data-state="checking" role="status">CHECKING API</div>
+      </header>
+
+      <div class="layout">
+        <section class="column" aria-label="Match workspace">
+          <form class="panel" id="match-form">
+            <div class="panel-heading">
+              <div><h2>Compare a project name</h2><p>Match an incoming record against your official project list.</p></div>
+              <span class="connection" data-state="online">DETERMINISTIC</span>
+            </div>
+            <div class="field-group">
+              <label class="label" for="dirty-name">Incoming name</label>
+              <input class="text-field" id="dirty-name" name="dirty_name" type="text" placeholder="e.g. 2460 North Australian" value="2460 North Australian" required autocomplete="off">
+            </div>
+            <div class="field-group">
+              <div class="catalog-toolbar">
+                <label class="label" for="known-projects">Official project names</label>
+                <div class="catalog-actions">
+                  <span class="count" id="project-count">0 PROJECTS</span>
+                  <label class="button" for="catalog-file" title="Load a newline-separated .txt file"><span class="icon" aria-hidden="true">upload_file</span><span>Load .txt</span></label>
+                  <input class="sr-only" id="catalog-file" type="file" accept=".txt,text/plain">
+                </div>
+              </div>
+              <textarea class="project-list" id="known-projects" name="known_projects" spellcheck="false" required aria-describedby="catalog-hint">100 Main St
+2460 N Australian Ave
+500 Broadway
+24-011 Australian Ave Renovation
+1500 S Broadway</textarea>
+              <span class="sr-only" id="catalog-hint">Enter one official project name per line, or load a plain text file.</span>
+            </div>
+            <div class="field-group">
+              <label class="label" for="threshold">Minimum confidence threshold</label>
+              <div class="threshold-row"><input id="threshold" type="range" min="0" max="100" step="1" value="80"><output class="threshold-value" id="threshold-value" for="threshold">80%</output></div>
+            </div>
+            <div class="form-footer">
+              <p class="form-note">A low score or conflicting identifier returns no match.</p>
+              <button class="button button-primary" id="match-button" type="submit"><span class="icon" aria-hidden="true">compare_arrows</span><span>Find best match</span></button>
+            </div>
+          </form>
+
+          <section class="panel" aria-labelledby="method-title">
+            <div class="panel-heading"><div><h2 id="method-title">Match safeguards</h2><p>Deterministic checks applied before a result is returned.</p></div><span class="icon" aria-hidden="true">rule</span></div>
+            <dl class="info-list">
+              <div class="info-row"><dt>Normalization</dt><dd>Case, punctuation, abbreviations</dd></div>
+              <div class="info-row"><dt>Critical identifiers</dt><dd>Phase, tower, building, numbers</dd></div>
+              <div class="info-row"><dt>Similarity</dt><dd>Character + token overlap</dd></div>
+            </dl>
+          </section>
+        </section>
+
+        <aside class="column column-secondary" aria-label="Match result">
+          <section class="panel result-panel" aria-live="polite" aria-atomic="true">
+            <div class="panel-heading"><div><p class="eyebrow">MATCH RESULT</p><h2>Best candidate</h2></div><span class="count" id="result-status">READY</span></div>
+            <div class="result-state" id="result-state" data-kind="idle">
+              <div class="result-icon"><span class="icon" id="result-icon" aria-hidden="true">manage_search</span></div>
+              <h3 id="result-title">Ready to compare</h3>
+              <p id="result-message">Submit a name to see the strongest official candidate and its confidence score.</p>
+            </div>
+            <div class="result-detail" id="result-detail">
+              <div class="score-line"><span>Confidence score</span><strong class="score" id="confidence-score">0%</strong></div>
+              <div class="score-track" role="meter" aria-label="Confidence score" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="score-meter"><div class="score-fill" id="score-fill"></div></div>
+              <dl class="info-list"><div class="info-row"><dt>Official name</dt><dd class="mono" id="best-match">—</dd></div><div class="info-row"><dt>Decision threshold</dt><dd class="mono" id="result-threshold">80%</dd></div></dl>
+            </div>
+          </section>
+          <section class="panel">
+            <div class="panel-heading"><div><h2>Current input</h2><p>Request summary</p></div><span class="icon" aria-hidden="true">dataset</span></div>
+            <dl class="info-list">
+              <div class="info-row"><dt>Project list</dt><dd class="mono" id="summary-count">0 records</dd></div>
+              <div class="info-row"><dt>Threshold</dt><dd class="mono" id="summary-threshold">80%</dd></div>
+              <div class="info-row"><dt>Endpoint</dt><dd class="mono">POST /api/match</dd></div>
+            </dl>
+          </section>
+        </aside>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const form = document.querySelector("#match-form");
+    const dirtyName = document.querySelector("#dirty-name");
+    const projectList = document.querySelector("#known-projects");
+    const fileInput = document.querySelector("#catalog-file");
+    const threshold = document.querySelector("#threshold");
+    const thresholdValue = document.querySelector("#threshold-value");
+    const matchButton = document.querySelector("#match-button");
+    const connectionState = document.querySelector("#connection-state");
+    const resultState = document.querySelector("#result-state");
+    const resultDetail = document.querySelector("#result-detail");
+    const resultStatus = document.querySelector("#result-status");
+
+    function getProjects() {
+      return projectList.value.split(/\r?\n/).map((name) => name.trim()).filter(Boolean);
+    }
+
+    function updateCatalogCount() {
+      const count = getProjects().length;
+      document.querySelector("#project-count").textContent = `${count} PROJECT${count === 1 ? "" : "S"}`;
+      document.querySelector("#summary-count").textContent = `${count} record${count === 1 ? "" : "s"}`;
+    }
+
+    function updateThreshold() {
+      const value = `${threshold.value}%`;
+      thresholdValue.value = value;
+      document.querySelector("#summary-threshold").textContent = value;
+      document.querySelector("#result-threshold").textContent = value;
+    }
+
+    function showResult(kind, title, message, status, match = null, score = 0) {
+      resultState.dataset.kind = kind;
+      document.querySelector("#result-icon").textContent = kind === "match" ? "task_alt" : kind === "error" ? "error" : kind === "rejected" ? "block" : "manage_search";
+      document.querySelector("#result-title").textContent = title;
+      document.querySelector("#result-message").textContent = message;
+      resultStatus.textContent = status;
+      resultDetail.classList.toggle("visible", kind === "match" || kind === "rejected");
+      document.querySelector("#best-match").textContent = match || "No match";
+      document.querySelector("#confidence-score").textContent = `${score.toFixed(2)}%`;
+      document.querySelector("#score-fill").style.width = `${score}%`;
+      document.querySelector("#score-meter").setAttribute("aria-valuenow", String(score));
+    }
+
+    threshold.addEventListener("input", updateThreshold);
+    projectList.addEventListener("input", updateCatalogCount);
+    fileInput.addEventListener("change", async () => {
+      const [file] = fileInput.files;
+      if (!file) return;
+      try {
+        projectList.value = await file.text();
+        updateCatalogCount();
+        showResult("idle", "Catalog loaded", `${file.name} is ready to use. Run a match when you are ready.`, "READY");
+      } catch {
+        showResult("error", "Could not load file", "Choose a readable plain-text file with one project name per line.", "FILE ERROR");
+      }
+      fileInput.value = "";
+    });
+
+    document.querySelector("#docs-link").addEventListener("click", () => window.open("/docs", "_blank", "noopener"));
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const projects = getProjects();
+      if (!projects.length) {
+        showResult("error", "Project list is empty", "Add official project names or load a .txt file before matching.", "INPUT ERROR");
+        projectList.focus();
+        return;
+      }
+
+      matchButton.disabled = true;
+      matchButton.querySelector("span:last-child").textContent = "Comparing...";
+      resultStatus.textContent = "RUNNING";
+      try {
+        const response = await fetch("/api/match", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ dirty_name: dirtyName.value.trim(), known_projects: projects, threshold: Number(threshold.value) }),
+        });
+        if (!response.ok) throw new Error(`Matcher API returned ${response.status}`);
+        const result = await response.json();
+        const score = Number(result.confidence_score) || 0;
+        if (result.best_match) {
+          showResult("match", "Match found", "The best candidate cleared the selected confidence threshold.", "ACCEPTED", result.best_match, score);
+        } else {
+          showResult("rejected", "No confident match", "No candidate cleared the threshold or a critical identifier conflicted.", "REJECTED", null, score);
+        }
+      } catch {
+        showResult("error", "Matcher unavailable", "The API request failed. Check that the FastAPI server is running, then retry.", "API ERROR");
+        connectionState.dataset.state = "offline";
+        connectionState.textContent = "API OFFLINE";
+      } finally {
+        matchButton.disabled = false;
+        matchButton.querySelector("span:last-child").textContent = "Find best match";
+      }
+    });
+
+    updateCatalogCount();
+    updateThreshold();
+    fetch("/openapi.json", { method: "HEAD" })
+      .then((response) => {
+        connectionState.dataset.state = response.ok ? "online" : "offline";
+        connectionState.textContent = response.ok ? "API ONLINE" : "API CHECK";
+      })
+      .catch(() => {
+        connectionState.dataset.state = "offline";
+        connectionState.textContent = "API OFFLINE";
+      });
+  </script>
+</body>
+</html>
