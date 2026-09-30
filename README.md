@@ -30,8 +30,6 @@ The project includes a Python matching module, a FastAPI service, and a React fr
 | `package.json` | Frontend dependencies and npm scripts. |
 | `package-lock.json` | Locked npm dependency versions. |
 | `vite.config.js` | Vite, React, and Tailwind configuration. |
-| `static/index.html` | Legacy standalone UI; it is not served by the current FastAPI app. |
-| `project_matcher.py`, `test_project_matcher.py` | Separate matcher draft and tests; the application does not import or run these files. |
 
 The UI's initial catalog is `INITIAL_PROJECTS` in `src/App.jsx`. The API does not read that constant directly: the frontend sends its project list in each request.
 
@@ -96,14 +94,6 @@ python -m unittest test_proyecto2 -v
 ```
 
 The suite covers abbreviation and name matching, 20 expected matches, 20 rejected near-misses, critical identifier conflicts, the confidence threshold, ambiguous candidates, and returned metrics.
-
-The separate Claude draft has its own suite and can be run with:
-
-```bash
-python -m unittest test_project_matcher -v
-```
-
-Those tests exercise `project_matcher.py`, which is not used by `main.py`.
 
 ## API
 
@@ -178,8 +168,6 @@ match_project_with_metrics(
 )
 # (best_match, confidence_score, metrics)
 ```
-
-`project_name_matcher(nombre_desordenado, base_de_datos)` remains as a compatibility adapter for the earlier manual tester. It uses a threshold of `82.0` and returns the string `"No match"` instead of `None` when there is no match.
 
 ## Current Matching Rules and Limitations
 

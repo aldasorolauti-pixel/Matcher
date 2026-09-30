@@ -222,12 +222,6 @@ def match_project(
     return best_match, confidence_score
 
 
-def project_name_matcher(nombre_desordenado: str, base_de_datos: list) -> tuple:
-    """Compatibility adapter for the earlier manual tester."""
-    match, score = match_project(nombre_desordenado, base_de_datos, threshold=82.0)
-    return (match if match is not None else "No match"), score
-
-
 if __name__ == "__main__":
     print(match_project(
         "1200 Main St Project",
