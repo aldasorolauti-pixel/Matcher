@@ -6,6 +6,8 @@ from proyecto2 import match_project, match_project_with_metrics
 MATCH_CASES = [
     ("2460 N Australian Ave", ["2460 North Australian"], "2460 North Australian"),
     ("24-011 Australian Ave Renovation", ["24-011 Australian Avenue Renovation"], "24-011 Australian Avenue Renovation"),
+    ("24-011 2460 Australian Ave", ["2460 Australian Ave"], "2460 Australian Ave"),
+    ("2460 North Australian Ave", ["2460 Australian Ave"], "2460 Australian Ave"),
     ("1500 S Broadway", ["1500 South Broadway"], "1500 South Broadway"),
     ("7800 W Sample Rd", ["7800 West Sample Road"], "7800 West Sample Road"),
     ("310 E Main St", ["310 East Main Street"], "310 East Main Street"),
@@ -53,7 +55,7 @@ NO_MATCH_CASES = [
 
 class ProjectNameMatcherTests(unittest.TestCase):
     def test_realistic_matches(self):
-        self.assertEqual(len(MATCH_CASES), 20)
+        self.assertEqual(len(MATCH_CASES), 22)
         for incoming, official_names, expected in MATCH_CASES:
             with self.subTest(incoming=incoming):
                 match, score = match_project(incoming, official_names, threshold=82.0)
@@ -88,6 +90,31 @@ class ProjectNameMatcherTests(unittest.TestCase):
                     (None, 0.0),
                 )
 
+    def test_numeros_y_direcciones_asimetricas(self):
+        resultado1, _ = match_project(
+            "24-011 2460 Australian Ave",
+            ["2460 Australian Ave", "100 Main St"],
+        )
+        self.assertEqual(resultado1, "2460 Australian Ave")
+
+        resultado2, _ = match_project(
+            "240 Main St",
+            ["250 Main St", "100 Broadway"],
+        )
+        self.assertNotEqual(resultado2, "250 Main St")
+
+        resultado3, _ = match_project(
+            "North Tower South Campus",
+            ["North Tower South Campus", "East Wing"],
+        )
+        self.assertEqual(resultado3, "North Tower South Campus")
+
+        resultado4, _ = match_project(
+            "South Campus",
+            ["Campus", "North Wing"],
+        )
+        self.assertEqual(resultado4, "Campus")
+
     def test_default_threshold_rejects_low_score(self):
         match, score = match_project(
             "unrelated project name",
@@ -105,7 +132,7 @@ class ProjectNameMatcherTests(unittest.TestCase):
         self.assertEqual(score, 100.0)
 
     def test_match_metrics_reflect_the_selected_candidate(self):
-        match, _, metrics = match_project_with_metrics(
+        match, _, metrics, candidates = match_project_with_metrics(
             "2460 North Australian",
             ["2460 N Australian Ave", "500 Broadway"],
         )
@@ -114,6 +141,14 @@ class ProjectNameMatcherTests(unittest.TestCase):
         self.assertEqual(metrics["word_overlap"], 75.0)
         self.assertEqual(metrics["identifier_compatibility"], 100.0)
         self.assertEqual(metrics["noise_retention"], 100.0)
+        self.assertEqual(
+            [candidate["name"] for candidate in candidates],
+            ["2460 N Australian Ave", "500 Broadway"],
+        )
+        self.assertGreaterEqual(
+            candidates[0]["confidence_score"],
+            candidates[1]["confidence_score"],
+        )
 
 
 if __name__ == "__main__":

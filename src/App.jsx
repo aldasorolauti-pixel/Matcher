@@ -1,7 +1,5 @@
 import { useState } from "react";
 import {
-  ArrowLeftRight,
-  Check,
   Copy,
   LoaderCircle,
   Search,
@@ -24,59 +22,21 @@ const PHASES = [
   { key: "noise_retention", label: "Noise Retention" },
 ];
 
-const ABBREVIATIONS = {
-  n: "north",
-  s: "south",
-  e: "east",
-  w: "west",
-  ave: "avenue",
-  st: "street",
-  blvd: "boulevard",
-  rd: "road",
-  dr: "drive",
-};
-
-function normalizeToken(token) {
-  const cleaned = token.toLowerCase().replace(/[^a-z0-9]/g, "");
-  return ABBREVIATIONS[cleaned] ?? cleaned;
-}
-
-function getTokens(value) {
-  return value.trim().split(/\s+/).filter(Boolean);
-}
-
 export default function App() {
   const [dirtyName, setDirtyName] = useState("2460 North Australian");
   const knownProjects = INITIAL_PROJECTS;
   const [bestMatch, setBestMatch] = useState(null);
+  const [isAcceptedMatch, setIsAcceptedMatch] = useState(false);
   const [confidenceScore, setConfidenceScore] = useState(null);
   const [matchMetrics, setMatchMetrics] = useState(null);
+  const [candidates, setCandidates] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [copyLabel, setCopyLabel] = useState("Copy match");
 
-  const incomingTokens = getTokens(dirtyName);
-  const normalizedIncoming = new Set(incomingTokens.map(normalizeToken));
-  const matchTokens = getTokens(bestMatch ?? "");
-  const sharedTokens = matchTokens.filter((token) =>
-    normalizedIncoming.has(normalizeToken(token)),
-  );
   const score = confidenceScore === null ? 0 : Math.max(0, Math.min(100, confidenceScore));
   const scoreColor = bestMatch ? "#ff394b" : "#70747d";
   const scoreOffset = 792 - (792 * score) / 100;
-  const numericInput = dirtyName.match(/\d+/)?.[0] ?? "—";
-  const numericMatch = bestMatch?.match(/\d+/)?.[0] ?? "—";
-  const allTokens = [...incomingTokens, ...matchTokens];
-  const abbreviationPair = allTokens.reduce((foundPair, token) => {
-    if (foundPair) return foundPair;
-    const expanded = ABBREVIATIONS[token.toLowerCase()];
-    if (!expanded) return null;
-    const matchingLongForm = allTokens.find(
-      (candidate) => normalizeToken(candidate) === expanded && candidate.toLowerCase() !== token.toLowerCase(),
-    );
-    return matchingLongForm ? { long: expanded, short: token } : null;
-  }, null);
-
   async function handleSearch(event) {
     event.preventDefault();
     if (!dirtyName.trim() || knownProjects.length === 0) {
@@ -87,6 +47,7 @@ export default function App() {
     setIsLoading(true);
     setError("");
     setMatchMetrics(null);
+    setCandidates([]);
 
     try {
       const response = await fetch("http://127.0.0.1:8000/api/match", {
@@ -104,13 +65,19 @@ export default function App() {
       }
 
       const result = await response.json();
-      setBestMatch(result.best_match);
-      setConfidenceScore(Number(result.confidence_score ?? 0));
-      setMatchMetrics(result.metrics ?? null);
+      const rankedCandidates = Array.isArray(result.candidates) ? result.candidates : [];
+      const topCandidate = rankedCandidates[0];
+      setCandidates(rankedCandidates);
+      setBestMatch(topCandidate?.name ?? result.best_match ?? null);
+      setIsAcceptedMatch(Boolean(result.best_match));
+      setConfidenceScore(Number(topCandidate?.confidence_score ?? result.confidence_score ?? 0));
+      setMatchMetrics(topCandidate?.metrics ?? result.metrics ?? null);
     } catch (requestError) {
       setBestMatch(null);
+      setIsAcceptedMatch(false);
       setConfidenceScore(null);
       setMatchMetrics(null);
+      setCandidates([]);
       setError(
         requestError instanceof Error
           ? requestError.message
@@ -132,7 +99,7 @@ export default function App() {
     }
   }
 
-  const alternatives = knownProjects.filter((project) => project !== bestMatch).slice(0, 2);
+  const alternatives = candidates.slice(1);
 
   return (
     <main className="flex min-h-screen items-start justify-center bg-[#0d0e11] px-3 py-4 text-[#e3e2e6] sm:items-center sm:px-6 sm:py-8">
@@ -174,7 +141,7 @@ export default function App() {
             <article className="relative flex min-h-[272px] flex-col justify-between overflow-hidden rounded-xl border border-[#292a2d] bg-[#121316] p-5">
               <div className="flex items-center justify-between gap-3 font-mono text-[10px] text-[#8e9193]">
                 <span className="flex items-center gap-1.5 uppercase">
-                  <span className={`size-1.5 rounded-full ${bestMatch ? "bg-[#f1f3f5]" : "bg-[#6a6d74]"}`} />
+                  <span className={`size-1.5 rounded-full ${isAcceptedMatch ? "bg-[#f1f3f5]" : "bg-[#6a6d74]"}`} />
                   Top candidate
                 </span>
                 <span className="text-right">LEVENSHTEIN + JACCARD</span>
@@ -225,40 +192,31 @@ export default function App() {
 
               <div className="flex items-start justify-between gap-3 border-t border-[#343538]/50 pt-3 font-mono text-[9px] text-[#8e9193] sm:text-[10px]">
                 <span className="min-w-0 break-words">QUERY: &quot;{dirtyName || "—"}&quot;</span>
-                <span className="shrink-0">{bestMatch ? "MATCHED" : "READY"}</span>
+                <span className="shrink-0">{isAcceptedMatch ? "MATCHED" : candidates.length ? "RANKED ONLY" : "READY"}</span>
               </div>
             </article>
 
             <article className="rounded-xl border border-[#292a2d] bg-[#121316] p-4">
               <div className="mb-3 flex items-center justify-between gap-3 font-mono text-[10px] text-[#8e9193]">
-                <span>TOKEN DECOMPOSITION</span>
-                <span>{sharedTokens.length} OF {matchTokens.length || incomingTokens.length} MATCHED</span>
+                <span>MATCH SIGNALS</span>
+                <span>BACKEND METRICS</span>
               </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="flex flex-col gap-2 rounded-lg border border-[#292a2d] bg-[#1f1f23] p-3">
                   <div className="flex items-center justify-between gap-2 font-mono text-[9px] text-[#c4c7c9] sm:text-[10px]">
-                    <span>ABBREVIATION EXPANSION</span><span className="text-[#f1f3f5]">{abbreviationPair ? "98%" : "—"}</span>
+                    <span>NORMALIZATION</span><span className="text-[#f1f3f5]">{matchMetrics ? `${Math.round(matchMetrics.normalization)}%` : "—"}</span>
                   </div>
-                  <div className="flex items-center gap-2 text-xs font-medium text-[#f1f3f5]">
-                    <span>{abbreviationPair ? abbreviationPair.long : "No abbreviation"}</span>
-                    <ArrowLeftRight className="text-[#8e9193]" size={13} />
-                    <span>{abbreviationPair ? abbreviationPair.short : "—"}</span>
-                  </div>
-                  <div className="h-1 overflow-hidden rounded-full bg-[#292a2d]"><div className="h-full rounded-full bg-[#f1f3f5]" style={{ width: abbreviationPair ? "98%" : "0%" }} /></div>
+                  <div className="text-xs font-medium text-[#f1f3f5]">Backend text normalization</div>
+                  <div className="h-1 overflow-hidden rounded-full bg-[#292a2d]"><div className="h-full rounded-full bg-[#f1f3f5]" style={{ width: `${matchMetrics?.normalization ?? 0}%` }} /></div>
                 </div>
                 <div className="flex flex-col gap-2 rounded-lg border border-[#292a2d] bg-[#1f1f23] p-3">
                   <div className="flex items-center justify-between gap-2 font-mono text-[9px] text-[#c4c7c9] sm:text-[10px]">
-                    <span>NUMERIC EXACTNESS</span><span className="text-[#f1f3f5]">{numericInput !== "—" && numericInput === numericMatch ? "100%" : "—"}</span>
+                    <span>WORD OVERLAP</span><span className="text-[#f1f3f5]">{matchMetrics ? `${Math.round(matchMetrics.word_overlap)}%` : "—"}</span>
                   </div>
-                  <div className="flex items-center gap-2 text-xs font-medium text-[#f1f3f5]">
-                    <span>Digits</span>
-                    <Check className="text-[#8e9193]" size={13} />
-                    <span className="truncate">{numericInput} ↔ {numericMatch}</span>
-                  </div>
-                  <div className="h-1 overflow-hidden rounded-full bg-[#292a2d]"><div className="h-full rounded-full bg-[#f1f3f5]" style={{ width: numericInput !== "—" && numericInput === numericMatch ? "100%" : "0%" }} /></div>
+                  <div className="text-xs font-medium text-[#f1f3f5]">Shared normalized terms</div>
+                  <div className="h-1 overflow-hidden rounded-full bg-[#292a2d]"><div className="h-full rounded-full bg-[#f1f3f5]" style={{ width: `${matchMetrics?.word_overlap ?? 0}%` }} /></div>
                 </div>
               </div>
-              <p className="mt-3 text-right font-mono text-[9px] text-[#686c74]">TOKEN DETAIL IS A UI PREVIEW</p>
             </article>
 
             <article className="flex flex-col justify-between rounded-xl border border-[#292a2d] bg-[#121316] p-4">
@@ -266,16 +224,16 @@ export default function App() {
                 <span>RUNNER-UPS</span><span>OFFICIAL RECORDS</span>
               </div>
               <div className="flex flex-col gap-1.5">
-                {alternatives.length ? alternatives.map((project, index) => (
-                  <div key={project} className="flex items-center justify-between gap-3 rounded-lg border border-transparent bg-[#1f1f23]/70 px-3 py-2 text-xs transition-colors hover:border-[#292a2d] hover:bg-[#1f1f23]">
+                {alternatives.length ? alternatives.map((candidate, index) => (
+                  <div key={candidate.name} className="flex items-center justify-between gap-3 rounded-lg border border-transparent bg-[#1f1f23]/70 px-3 py-2 text-xs transition-colors hover:border-[#292a2d] hover:bg-[#1f1f23]">
                     <div className="flex min-w-0 items-center gap-2 text-[#c4c7c9]">
                       <span className="shrink-0 font-mono text-[10px] text-[#8e9193]">0{index + 2}</span>
-                      <span className="truncate">{project}</span>
+                      <span className="truncate">{candidate.name}</span>
                     </div>
-                    <span className="shrink-0 font-mono text-[9px] text-[#686c74]">NOT SCORED</span>
+                    <span className="shrink-0 font-mono text-[9px] text-[#8e9193]">{candidate.confidence_score}%</span>
                   </div>
                 )) : (
-                  <div className="rounded-lg bg-[#1f1f23]/70 px-3 py-3 text-xs text-[#8e9193]">Load more official records to see alternatives.</div>
+                  <div className="rounded-lg bg-[#1f1f23]/70 px-3 py-3 text-xs text-[#8e9193]">Search to score official records.</div>
                 )}
               </div>
             </article>

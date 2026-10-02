@@ -60,6 +60,30 @@ def _quitar_ruido(texto_normalizado: str) -> str:
     return " ".join(palabras)
 
 
+def _quitar_detalles_sin_contraparte(texto1: str, texto2: str) -> tuple[str, str]:
+    tokens1 = set(texto1.split())
+    tokens2 = set(texto2.split())
+    numeros1 = {token for token in tokens1 if token.isdigit()}
+    numeros2 = {token for token in tokens2 if token.isdigit()}
+    cardinales = {
+        "north", "south", "east", "west",
+        "northeast", "northwest", "southeast", "southwest",
+    }
+    direcciones1 = tokens1 & cardinales
+    direcciones2 = tokens2 & cardinales
+
+    quitar1 = (numeros1 - numeros2) if numeros2 else numeros1
+    quitar2 = (numeros2 - numeros1) if numeros1 else numeros2
+    if not direcciones2:
+        quitar1 |= direcciones1
+    if not direcciones1:
+        quitar2 |= direcciones2
+
+    texto1_ajustado = " ".join(token for token in texto1.split() if token not in quitar1)
+    texto2_ajustado = " ".join(token for token in texto2.split() if token not in quitar2)
+    return texto1_ajustado, texto2_ajustado
+
+
 def _hay_conflicto_critico(texto1: str, texto2: str) -> bool:
     identificadores1 = _extraer_identificadores(texto1)
     identificadores2 = _extraer_identificadores(texto2)
@@ -71,7 +95,12 @@ def _hay_conflicto_critico(texto1: str, texto2: str) -> bool:
     )
     numeros1 = set(re.findall(r"\b\d+\b", texto1))
     numeros2 = set(re.findall(r"\b\d+\b", texto2))
-    conflicto_numerico = bool(numeros1 and numeros2 and numeros1 != numeros2)
+    conflicto_numerico = bool(
+        numeros1
+        and numeros2
+        and not numeros1.issubset(numeros2)
+        and not numeros2.issubset(numeros1)
+    )
 
     cardinales_opuestos = {
         ("north", "south"),
@@ -82,7 +111,18 @@ def _hay_conflicto_critico(texto1: str, texto2: str) -> bool:
     tokens1 = set(texto1.split())
     tokens2 = set(texto2.split())
     conflicto_cardinal = any(
-        (a in tokens1 and b in tokens2) or (b in tokens1 and a in tokens2)
+        (
+            a in tokens1
+            and b in tokens2
+            and a not in tokens2
+            and b not in tokens1
+        )
+        or (
+            b in tokens1
+            and a in tokens2
+            and b not in tokens2
+            and a not in tokens1
+        )
         for a, b in cardinales_opuestos
     )
 
@@ -97,19 +137,23 @@ def _comparar_proyectos(
     oficial_normalizado = _normalizar(nombre_oficial)
     sucio_limpio = _quitar_ruido(sucio_normalizado)
     oficial_limpio = _quitar_ruido(oficial_normalizado)
+    sucio_comparable, oficial_comparable = _quitar_detalles_sin_contraparte(
+        sucio_limpio,
+        oficial_limpio,
+    )
 
     similitud_normalizada = SequenceMatcher(
         None,
-        sucio_normalizado,
-        oficial_normalizado,
+        sucio_comparable,
+        oficial_comparable,
     ).ratio()
     similitud_textual = SequenceMatcher(
         None,
-        sucio_limpio,
-        oficial_limpio,
+        sucio_comparable,
+        oficial_comparable,
     ).ratio()
-    tokens_sucios = set(sucio_limpio.split())
-    tokens_oficiales = set(oficial_limpio.split())
+    tokens_sucios = set(sucio_comparable.split())
+    tokens_oficiales = set(oficial_comparable.split())
     union_tokens = tokens_sucios | tokens_oficiales
     similitud_palabras = (
         len(tokens_sucios & tokens_oficiales) / len(union_tokens)
@@ -151,8 +195,13 @@ def match_project_with_metrics(
     known_projects: list[str],
     threshold: float = 80.0,
     ambiguity_margin: float = 5.0,
-) -> tuple[str | None, float, dict[str, float] | None]:
-    """Return the best official name and deterministic similarity score (0-100).
+) -> tuple[
+    str | None,
+    float,
+    dict[str, float] | None,
+    list[dict[str, object]],
+]:
+    """Return the accepted match and every scored candidate, sorted by score.
 
     Critical identifiers that appear in both names must agree. Construction
     noise words are excluded from scoring, and abbreviation expansion happens
@@ -161,10 +210,11 @@ def match_project_with_metrics(
     dirty_normalizado = _normalizar(dirty_name)
     dirty_limpio = _quitar_ruido(dirty_normalizado)
     if not dirty_limpio:
-        return None, 0.0, None
+        return None, 0.0, None, []
 
     puntajes: list[tuple[str, float, dict[str, float]]] = []
     metricas_candidatas: list[tuple[float, dict[str, float]]] = []
+    candidatos: list[dict[str, object]] = []
 
     for nombre_oficial in known_projects:
         oficial_normalizado = _normalizar(nombre_oficial)
@@ -177,17 +227,26 @@ def match_project_with_metrics(
             nombre_oficial,
         )
         metricas_candidatas.append((puntaje, metricas))
+        candidatos.append({
+            "name": nombre_oficial,
+            "confidence_score": puntaje,
+            "metrics": metricas,
+        })
         if not _hay_conflicto_critico(dirty_normalizado, oficial_normalizado):
             puntajes.append((nombre_oficial, puntaje, metricas))
 
+    candidatos.sort(
+        key=lambda candidato: candidato["confidence_score"],
+        reverse=True,
+    )
     if not puntajes:
         metricas = max(metricas_candidatas, key=lambda item: item[0])[1] if metricas_candidatas else None
-        return None, 0.0, metricas
+        return None, 0.0, metricas, candidatos
 
     puntajes.sort(key=lambda candidato: candidato[1], reverse=True)
     mejor_nombre, mejor_puntaje, mejores_metricas = puntajes[0]
     if mejor_puntaje < threshold:
-        return None, mejor_puntaje, mejores_metricas
+        return None, mejor_puntaje, mejores_metricas, candidatos
 
     segundo_nombre, segundo_puntaje = next(
         (
@@ -202,9 +261,9 @@ def match_project_with_metrics(
         and segundo_puntaje >= threshold
         and mejor_puntaje - segundo_puntaje < ambiguity_margin
     ):
-        return None, mejor_puntaje, mejores_metricas
+        return None, mejor_puntaje, mejores_metricas, candidatos
 
-    return mejor_nombre, mejor_puntaje, mejores_metricas
+    return mejor_nombre, mejor_puntaje, mejores_metricas, candidatos
 
 
 def match_project(
@@ -213,7 +272,7 @@ def match_project(
     threshold: float = 80.0,
     ambiguity_margin: float = 5.0,
 ) -> tuple[str | None, float]:
-    best_match, confidence_score, _ = match_project_with_metrics(
+    best_match, confidence_score, _, _ = match_project_with_metrics(
         dirty_name,
         known_projects,
         threshold=threshold,
